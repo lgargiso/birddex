@@ -183,7 +183,7 @@ export default function BirdCard({
             onClick={onSave}
             className="w-full py-3 rounded font-pixel text-xs text-white bg-[#DC0A2D] hover:bg-red-700 active:bg-red-900 transition-colors border-b-4 border-[#9B0A1F]"
           >
-            + ADD TO POKÉDEX
+            + ADD TO BIRDDEX
           </button>
         )}
       </div>

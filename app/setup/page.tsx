@@ -70,7 +70,7 @@ export default function SetupPage() {
             ))}
           </select>
           <p className="text-xs text-gray-600">
-            Your Pokédex will be populated with birds recorded in this state by eBird.
+            Your BirdDex will be populated with birds recorded in this state by eBird.
           </p>
         </div>
 

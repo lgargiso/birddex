@@ -4,7 +4,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "BirdDex",
-  description: "Identify wild birds like a Pokédex",
+  description: "Identify wild birds and build your BirdDex",
   manifest: "/manifest.json",
   appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "BirdDex" },
 };

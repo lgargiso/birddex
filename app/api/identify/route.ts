@@ -10,7 +10,7 @@ const BirdResult = z.object({
   scientificName: z.string(),
   speciesCode: z.string(), // eBird-style code, best guess
   confidence: z.number().min(0).max(1),
-  description: z.string(), // Pokédex-style entry, 2-3 sentences
+  description: z.string(), // BirdDex-style entry, 2-3 sentences
   habitat: z.string(),
   funFact: z.string(),
 });
@@ -42,7 +42,7 @@ Respond with ONLY valid JSON matching this schema exactly:
   "scientificName": "e.g. Baeolophus bicolor",
   "speciesCode": "eBird-style species code e.g. tuftit (lowercase, 6 chars)",
   "confidence": 0.0-1.0,
-  "description": "2-3 sentence Pokédex-style entry. Exciting, factual, vivid. Starts with the bird's name.",
+  "description": "2-3 sentence BirdDex-style entry. Exciting, factual, vivid. Starts with the bird's name.",
   "habitat": "Primary habitat in 5 words or less",
   "funFact": "One surprising fact about this species"
 }
