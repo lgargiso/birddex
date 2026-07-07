@@ -40,6 +40,9 @@ export default function IdentifyPage() {
   const [saved, setSaved] = useState(false);
   const [celebrating, setCelebrating] = useState(false);
   const [error, setError] = useState("");
+  const [zoom, setZoom] = useState(1);
+  const [zoomMax, setZoomMax] = useState(5);
+  const hardwareZoomRef = useRef(false);
 
   function stopCamera() {
     streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -58,30 +61,67 @@ export default function IdentifyPage() {
   const startCamera = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } },
+        video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } },
       });
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         videoRef.current.play();
       }
+      // Check for hardware zoom support
+      const track = stream.getVideoTracks()[0];
+      const caps = track.getCapabilities?.() as Record<string, unknown> | undefined;
+      if (caps?.zoom && typeof caps.zoom === "object" && caps.zoom !== null) {
+        const z = caps.zoom as { min?: number; max?: number };
+        hardwareZoomRef.current = true;
+        setZoomMax(z.max || 5);
+      } else {
+        hardwareZoomRef.current = false;
+        setZoomMax(5); // software zoom cap
+      }
+      setZoom(1);
       setCameraActive(true);
     } catch {
-      // Fall back to file upload if camera denied
       setCameraActive(false);
     }
   }, []);
 
-  // Capture frame from video
+  // Apply zoom — hardware if supported, else CSS scale (captured via canvas crop)
+  const applyZoom = useCallback(async (val: number) => {
+    setZoom(val);
+    if (hardwareZoomRef.current && streamRef.current) {
+      const track = streamRef.current.getVideoTracks()[0];
+      try {
+        await track.applyConstraints({ advanced: [{ zoom: val } as MediaTrackConstraintSet] });
+      } catch { /* ignore if not supported */ }
+    }
+  }, []);
+
+  // Capture frame from video — crop for software zoom
   function captureFrame() {
     const video = videoRef.current;
     const canvas = canvasRef.current;
     if (!video || !canvas) return;
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    canvas.getContext("2d")?.drawImage(video, 0, 0);
+    const vw = video.videoWidth;
+    const vh = video.videoHeight;
+    canvas.width = vw;
+    canvas.height = vh;
+    const ctx = canvas.getContext("2d");
+    if (ctx) {
+      if (!hardwareZoomRef.current && zoom > 1) {
+        // Software zoom: draw a cropped center region at full canvas size
+        const sw = vw / zoom;
+        const sh = vh / zoom;
+        const sx = (vw - sw) / 2;
+        const sy = (vh - sh) / 2;
+        ctx.drawImage(video, sx, sy, sw, sh, 0, 0, vw, vh);
+      } else {
+        ctx.drawImage(video, 0, 0);
+      }
+    }
     const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
     stopCamera();
+    setZoom(1);
     setCapturedImage(dataUrl);
     setStage("preview");
   }
@@ -201,7 +241,14 @@ export default function IdentifyPage() {
               POINT CAMERA<br/>AT A BIRD
             </p>
             <div className="relative w-full aspect-[4/3] bg-black rounded-xl overflow-hidden border-2 border-gray-700">
-              <video ref={videoRef} className="w-full h-full object-cover" playsInline muted autoPlay />
+              <video
+                ref={videoRef}
+                className="w-full h-full object-cover"
+                playsInline muted autoPlay
+                style={!hardwareZoomRef.current && zoom > 1
+                  ? { transform: `scale(${zoom})`, transformOrigin: "center" }
+                  : undefined}
+              />
               {/* Crosshair overlay */}
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                 <div className="w-32 h-32 border-2 border-[var(--dex-green)] opacity-60 rounded">
@@ -211,6 +258,31 @@ export default function IdentifyPage() {
                   <div className="absolute bottom-0 right-0 w-4 h-4 border-b-2 border-r-2 border-[var(--dex-green)]" />
                 </div>
               </div>
+              {/* Zoom slider */}
+              {cameraActive && (
+                <div className="absolute bottom-3 left-3 right-3 flex items-center gap-2">
+                  <button
+                    onClick={() => applyZoom(Math.max(1, parseFloat((zoom - 0.5).toFixed(1))))}
+                    className="w-7 h-7 rounded-full bg-black bg-opacity-60 text-white font-bold text-sm flex items-center justify-center border border-gray-600"
+                  >−</button>
+                  <input
+                    type="range"
+                    min={1}
+                    max={zoomMax}
+                    step={0.1}
+                    value={zoom}
+                    onChange={(e) => applyZoom(parseFloat(e.target.value))}
+                    className="flex-1 h-1 accent-[var(--dex-green)]"
+                  />
+                  <button
+                    onClick={() => applyZoom(Math.min(zoomMax, parseFloat((zoom + 0.5).toFixed(1))))}
+                    className="w-7 h-7 rounded-full bg-black bg-opacity-60 text-white font-bold text-sm flex items-center justify-center border border-gray-600"
+                  >+</button>
+                  <span className="font-pixel text-white bg-black bg-opacity-60 px-1.5 py-0.5 rounded" style={{fontSize:"8px"}}>
+                    {zoom.toFixed(1)}×
+                  </span>
+                </div>
+              )}
             </div>
             <canvas ref={canvasRef} className="hidden" />
             {!cameraActive && (
