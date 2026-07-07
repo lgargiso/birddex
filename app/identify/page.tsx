@@ -41,7 +41,7 @@ export default function IdentifyPage() {
   const [celebrating, setCelebrating] = useState(false);
   const [error, setError] = useState("");
   const [zoom, setZoom] = useState(1);
-  const [zoomMax, setZoomMax] = useState(5);
+  const [zoomMax, setZoomMax] = useState(26);
   const hardwareZoomRef = useRef(false);
 
   function stopCamera() {
@@ -74,10 +74,10 @@ export default function IdentifyPage() {
       if (caps?.zoom && typeof caps.zoom === "object" && caps.zoom !== null) {
         const z = caps.zoom as { min?: number; max?: number };
         hardwareZoomRef.current = true;
-        setZoomMax(z.max || 5);
+        setZoomMax(z.max || 26);
       } else {
         hardwareZoomRef.current = false;
-        setZoomMax(5); // software zoom cap
+        setZoomMax(26); // iOS supports up to ~26×
       }
       setZoom(1);
       setCameraActive(true);
