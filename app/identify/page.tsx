@@ -43,6 +43,7 @@ export default function IdentifyPage() {
   const [zoom, setZoom] = useState(1);
   const [zoomMax, setZoomMax] = useState(26);
   const hardwareZoomRef = useRef(false);
+  const pinchRef = useRef<{ dist: number; zoom: number } | null>(null);
 
   function stopCamera() {
     streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -95,6 +96,31 @@ export default function IdentifyPage() {
         await track.applyConstraints({ advanced: [{ zoom: val } as MediaTrackConstraintSet] });
       } catch { /* ignore if not supported */ }
     }
+  }, []);
+
+  // Pinch-to-zoom handlers
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (e.touches.length === 2) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      pinchRef.current = { dist: Math.hypot(dx, dy), zoom };
+    }
+  }, [zoom]);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (e.touches.length === 2 && pinchRef.current) {
+      e.preventDefault();
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      const newDist = Math.hypot(dx, dy);
+      const scale = newDist / pinchRef.current.dist;
+      const newZoom = Math.min(zoomMax, Math.max(1, parseFloat((pinchRef.current.zoom * scale).toFixed(1))));
+      applyZoom(newZoom);
+    }
+  }, [applyZoom, zoomMax]);
+
+  const handleTouchEnd = useCallback(() => {
+    pinchRef.current = null;
   }, []);
 
   // Capture frame from video — crop for software zoom
@@ -240,7 +266,7 @@ export default function IdentifyPage() {
             <p className="font-pixel text-[var(--dex-green)] text-xs text-center leading-relaxed">
               POINT CAMERA<br/>AT A BIRD
             </p>
-            <div className="relative w-full aspect-[4/3] bg-black rounded-xl overflow-hidden border-2 border-gray-700">
+            <div className="relative w-full aspect-[4/3] bg-black rounded-xl overflow-hidden border-2 border-gray-700" onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd} style={{touchAction:"none"}}>
               <video
                 ref={videoRef}
                 className="w-full h-full object-cover"
