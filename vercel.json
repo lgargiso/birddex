@@ -1,3 +1,3 @@
 {
-  "buildCommand": "rm -f tsconfig.tsbuildinfo && next build"
+  "buildCommand": "rm -f tsconfig.tsbuildinfo && npm run build"
 }
