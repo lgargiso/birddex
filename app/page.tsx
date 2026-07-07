@@ -29,9 +29,10 @@ export default function HomePage() {
   async function loadDex() {
     setLoading(true);
     try {
-      // Default to New York for demo; user can set their state in /setup
+      const country = localStorage.getItem("birddex_country") || "US";
       const state = localStorage.getItem("birddex_state") || "NY";
-      const res = await fetch(`/api/dex?state=${state}`);
+      const params = country === "US" ? `country=US&state=${state}` : `country=${country}`;
+      const res = await fetch(`/api/dex?${params}`);
       const data = await res.json();
       setDex(data);
     } catch {
@@ -59,7 +60,7 @@ export default function HomePage() {
         {/* Progress bar */}
         <div className="px-4 pt-4 pb-2">
           <div className="flex items-center justify-between mb-1.5">
-            <span className="dex-number">POKÉDEX COMPLETION</span>
+            <span className="dex-number">BIRDDEX COMPLETION</span>
             <span className="dex-number">{caughtCount}/{dex.length} ({pct}%)</span>
           </div>
           <div className="h-2 bg-gray-800 rounded-full overflow-hidden">

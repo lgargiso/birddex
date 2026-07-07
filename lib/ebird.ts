@@ -52,9 +52,11 @@ async function enrichSpeciesCodes(codes: string[], apiKey: string): Promise<EBir
   }
 }
 
-// Convert US state abbreviation to eBird region code
-export function stateToRegionCode(state: string): string {
-  return `US-${state.toUpperCase()}`;
+// Convert country + optional US state to eBird region code
+// US + state → "US-NY", any other country → ISO code e.g. "GB", "AU"
+export function toRegionCode(country: string, state?: string): string {
+  if (country === "US" && state) return `US-${state.toUpperCase()}`;
+  return country.toUpperCase();
 }
 
 // Get recent nearby observations (for area-based dex population)

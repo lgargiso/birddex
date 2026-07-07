@@ -1,20 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { getRegionSpecies, getNearbySpecies, stateToRegionCode } from "@/lib/ebird";
+import { getRegionSpecies, getNearbySpecies, toRegionCode } from "@/lib/ebird";
 import { db } from "@/lib/db";
 
 export async function GET(req: NextRequest) {
   const { userId } = await auth();
   const { searchParams } = new URL(req.url);
-  const state = searchParams.get("state");
+  const country = searchParams.get("country") || "US";
+  const state = searchParams.get("state") || undefined;
   const lat = searchParams.get("lat");
   const lng = searchParams.get("lng");
 
   let species: Awaited<ReturnType<typeof getNearbySpecies>> = [];
   if (lat && lng) {
     species = await getNearbySpecies(parseFloat(lat), parseFloat(lng));
-  } else if (state) {
-    species = await getRegionSpecies(stateToRegionCode(state));
+  } else {
+    species = await getRegionSpecies(toRegionCode(country, state));
   }
 
   // If logged in, merge caught status
