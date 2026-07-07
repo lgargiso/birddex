@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useUser, SignInButton } from "@clerk/nextjs";
+import { useRouter } from "next/navigation";
 import DexTopBar from "@/components/DexTopBar";
 import DexBottomBar from "@/components/DexBottomBar";
 
@@ -34,7 +35,14 @@ export default function HomePage() {
       const params = country === "US" ? `country=US&state=${state}` : `country=${country}`;
       const res = await fetch(`/api/dex?${params}`);
       const data = await res.json();
-      setDex(data);
+      // Merge localStorage guest catches
+      const guestCaught: string[] = JSON.parse(localStorage.getItem("birddex_caught_guest") || "[]");
+      if (guestCaught.length > 0) {
+        const guestSet = new Set(guestCaught);
+        setDex(data.map((e: DexEntry) => ({ ...e, caught: e.caught || guestSet.has(e.speciesCode) })));
+      } else {
+        setDex(data);
+      }
     } catch {
       // ignore
     } finally {
@@ -135,8 +143,15 @@ export default function HomePage() {
 }
 
 function DexTile({ entry }: { entry: DexEntry }) {
+  const router = useRouter();
+  function handleClick() {
+    if (entry.caught) {
+      router.push(`/species/${entry.speciesCode}?name=${encodeURIComponent(entry.comName)}`);
+    }
+  }
   return (
     <div
+      onClick={handleClick}
       className={`rounded-lg border p-2 flex flex-col items-center gap-1 aspect-square justify-center cursor-pointer
         ${entry.caught ? "border-[var(--dex-green)] caught-glow bg-[#0d2818]" : "border-gray-800 bg-[#161b22]"}`}
     >

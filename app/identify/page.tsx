@@ -118,9 +118,26 @@ export default function IdentifyPage() {
     }
   }
 
-  // Save sighting
+  // Save sighting + photo
   async function saveSighting() {
-    if (!result || !user) return;
+    if (!result) return;
+
+    if (!user) {
+      // Guest: mark as caught in localStorage only (no photo storage)
+      const caught: string[] = JSON.parse(localStorage.getItem("birddex_caught_guest") || "[]");
+      if (!caught.includes(result.speciesCode)) {
+        caught.push(result.speciesCode);
+        localStorage.setItem("birddex_caught_guest", JSON.stringify(caught));
+      }
+      setSaved(true);
+      return;
+    }
+
+    // Signed in: upload photo to Vercel Blob, then save sighting
+    const base64 = capturedImage.split(",")[1];
+    const mimeType = capturedImage.split(";")[0].split(":")[1];
+
+    // Save sighting first (establishes the record Photo FK needs)
     await fetch("/api/sighting", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -128,10 +145,22 @@ export default function IdentifyPage() {
         speciesCode: result.speciesCode,
         commonName: result.commonName,
         sciName: result.scientificName,
-        photoUrl: capturedImage,
         confidence: result.confidence,
       }),
     });
+
+    // Upload photo to blob
+    await fetch("/api/photo", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        imageBase64: base64,
+        mimeType,
+        speciesCode: result.speciesCode,
+        commonName: result.commonName,
+      }),
+    });
+
     setSaved(true);
   }
 
@@ -247,7 +276,7 @@ export default function IdentifyPage() {
               wikiImageUrl={detail?.wiki?.imageUrl}
               sounds={detail?.sounds || []}
               isNew={!saved}
-              onSave={user && !saved ? saveSighting : undefined}
+              onSave={!saved ? saveSighting : undefined}
             />
             <button
               onClick={() => { setStage("camera"); setCapturedImage(""); setResult(null); setSaved(false); }}

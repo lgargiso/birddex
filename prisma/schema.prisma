@@ -28,7 +28,20 @@ model Sighting {
   longitude   Float?
   confidence  Float?
   spottedAt   DateTime @default(now())
+  photos      Photo[]
 
   @@unique([userId, speciesCode])
   @@index([userId])
+}
+
+model Photo {
+  id          String   @id @default(cuid())
+  userId      String
+  speciesCode String
+  commonName  String
+  blobUrl     String
+  spottedAt   DateTime @default(now())
+  sighting    Sighting @relation(fields: [userId, speciesCode], references: [userId, speciesCode])
+
+  @@index([userId, speciesCode])
 }
