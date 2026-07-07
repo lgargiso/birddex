@@ -1,0 +1,34 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String     @id // Clerk user ID
+  zipCode   String?
+  state     String?
+  country   String     @default("US")
+  createdAt DateTime   @default(now())
+  sightings Sighting[]
+}
+
+model Sighting {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  speciesCode String   // eBird species code e.g. "tuftit"
+  commonName  String
+  sciName     String?
+  photoUrl    String?
+  latitude    Float?
+  longitude   Float?
+  confidence  Float?   // Claude's confidence 0-1
+  spottedAt   DateTime @default(now())
+
+  @@unique([userId, speciesCode]) // one entry per species per user (first sighting)
+  @@index([userId])
+}
