@@ -8,7 +8,7 @@ datasource db {
 }
 
 model User {
-  id        String     @id // Clerk user ID
+  id        String     @id
   zipCode   String?
   state     String?
   country   String     @default("US")
@@ -20,15 +20,15 @@ model Sighting {
   id          String   @id @default(cuid())
   userId      String
   user        User     @relation(fields: [userId], references: [id])
-  speciesCode String   // eBird species code e.g. "tuftit"
+  speciesCode String
   commonName  String
   sciName     String?
   photoUrl    String?
   latitude    Float?
   longitude   Float?
-  confidence  Float?   // Claude's confidence 0-1
+  confidence  Float?
   spottedAt   DateTime @default(now())
 
-  @@unique([userId, speciesCode]) // one entry per species per user (first sighting)
+  @@unique([userId, speciesCode])
   @@index([userId])
 }

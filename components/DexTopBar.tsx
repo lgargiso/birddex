@@ -36,7 +36,7 @@ export default function DexTopBar() {
             ←
           </button>
         )}
-        <UserButton afterSignOutUrl="/" />
+        <UserButton />
       </div>
     </div>
   );

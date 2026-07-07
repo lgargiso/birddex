@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
   const lat = searchParams.get("lat");
   const lng = searchParams.get("lng");
 
-  let species = [];
+  let species: Awaited<ReturnType<typeof getNearbySpecies>> = [];
   if (lat && lng) {
     species = await getNearbySpecies(parseFloat(lat), parseFloat(lng));
   } else if (state) {
