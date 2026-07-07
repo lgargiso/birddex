@@ -27,6 +27,9 @@ model Sighting {
   latitude    Float?
   longitude   Float?
   confidence  Float?
+  description String?
+  habitat     String?
+  funFact     String?
   spottedAt   DateTime @default(now())
   photos      Photo[]
 

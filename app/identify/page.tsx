@@ -1,11 +1,11 @@
 "use client";
 
-import { useRef, useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useUser } from "@clerk/nextjs";
 import DexTopBar from "@/components/DexTopBar";
 import DexBottomBar from "@/components/DexBottomBar";
 import BirdCard from "@/components/BirdCard";
+import NewCatchOverlay from "@/components/NewCatchOverlay";
 
 interface BirdResult {
   isBird: boolean;
@@ -27,18 +27,32 @@ type Stage = "camera" | "preview" | "scanning" | "result" | "error";
 
 export default function IdentifyPage() {
   const { user } = useUser();
-  const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
   const [stage, setStage] = useState<Stage>("camera");
+  const [cameraActive, setCameraActive] = useState(false);
   const [capturedImage, setCapturedImage] = useState<string>(""); // data URL
   const [result, setResult] = useState<BirdResult | null>(null);
   const [detail, setDetail] = useState<BirdDetail | null>(null);
   const [saved, setSaved] = useState(false);
+  const [celebrating, setCelebrating] = useState(false);
   const [error, setError] = useState("");
+
+  function stopCamera() {
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+    setCameraActive(false);
+  }
+
+  // Stop the camera when leaving the page
+  useEffect(() => {
+    return () => {
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+    };
+  }, []);
 
   // Start camera
   const startCamera = useCallback(async () => {
@@ -51,8 +65,10 @@ export default function IdentifyPage() {
         videoRef.current.srcObject = stream;
         videoRef.current.play();
       }
+      setCameraActive(true);
     } catch {
       // Fall back to file upload if camera denied
+      setCameraActive(false);
     }
   }, []);
 
@@ -65,7 +81,7 @@ export default function IdentifyPage() {
     canvas.height = video.videoHeight;
     canvas.getContext("2d")?.drawImage(video, 0, 0);
     const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
-    streamRef.current?.getTracks().forEach((t) => t.stop());
+    stopCamera();
     setCapturedImage(dataUrl);
     setStage("preview");
   }
@@ -76,6 +92,7 @@ export default function IdentifyPage() {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = (ev) => {
+      stopCamera();
       setCapturedImage(ev.target?.result as string);
       setStage("preview");
     };
@@ -89,11 +106,13 @@ export default function IdentifyPage() {
     try {
       const base64 = capturedImage.split(",")[1];
       const mimeType = capturedImage.split(";")[0].split(":")[1];
+      const country = localStorage.getItem("birddex_country") || "US";
+      const state = localStorage.getItem("birddex_state") || "NY";
 
       const res = await fetch("/api/identify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageBase64: base64, mimeType }),
+        body: JSON.stringify({ imageBase64: base64, mimeType, country, state }),
       });
       const data: BirdResult = await res.json();
 
@@ -128,17 +147,18 @@ export default function IdentifyPage() {
       if (!caught.includes(result.speciesCode)) {
         caught.push(result.speciesCode);
         localStorage.setItem("birddex_caught_guest", JSON.stringify(caught));
+        setCelebrating(true);
       }
       setSaved(true);
       return;
     }
 
-    // Signed in: upload photo to Vercel Blob, then save sighting
+    // Signed in: save sighting, then upload photo to Vercel Blob
     const base64 = capturedImage.split(",")[1];
     const mimeType = capturedImage.split(";")[0].split(":")[1];
 
     // Save sighting first (establishes the record Photo FK needs)
-    await fetch("/api/sighting", {
+    const res = await fetch("/api/sighting", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -146,8 +166,12 @@ export default function IdentifyPage() {
         commonName: result.commonName,
         sciName: result.scientificName,
         confidence: result.confidence,
+        description: result.description,
+        habitat: result.habitat,
+        funFact: result.funFact,
       }),
     });
+    const saveData = await res.json().catch(() => ({}));
 
     // Upload photo to blob
     await fetch("/api/photo", {
@@ -161,6 +185,7 @@ export default function IdentifyPage() {
       }),
     });
 
+    if (saveData?.isNew) setCelebrating(true);
     setSaved(true);
   }
 
@@ -176,7 +201,7 @@ export default function IdentifyPage() {
               POINT CAMERA<br/>AT A BIRD
             </p>
             <div className="relative w-full aspect-[4/3] bg-black rounded-xl overflow-hidden border-2 border-gray-700">
-              <video ref={videoRef} className="w-full h-full object-cover" playsInline muted autoPlay onCanPlay={() => {}} />
+              <video ref={videoRef} className="w-full h-full object-cover" playsInline muted autoPlay />
               {/* Crosshair overlay */}
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                 <div className="w-32 h-32 border-2 border-[var(--dex-green)] opacity-60 rounded">
@@ -188,29 +213,39 @@ export default function IdentifyPage() {
               </div>
             </div>
             <canvas ref={canvasRef} className="hidden" />
-            <div className="flex gap-4">
-              <button
-                onClick={() => { startCamera(); }}
-                className="dex-btn px-6 py-3 rounded-xl font-pixel text-white text-xs"
-                style={{borderRadius:"12px"}}
-              >
-                CAMERA
-              </button>
-              <button
-                onClick={() => fileRef.current?.click()}
-                className="px-6 py-3 rounded-xl font-pixel text-gray-300 text-xs border border-gray-600 bg-[#161b22]"
-              >
-                UPLOAD
-              </button>
-              <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
-            </div>
-            {videoRef.current && (
-              <button
-                onClick={captureFrame}
-                className="dex-btn w-20 h-20 rounded-full font-pixel text-white text-xs"
-              >
-                SNAP
-              </button>
+            {!cameraActive && (
+              <div className="flex gap-4">
+                <button
+                  onClick={() => { startCamera(); }}
+                  className="dex-btn px-6 py-3 rounded-xl font-pixel text-white text-xs"
+                  style={{borderRadius:"12px"}}
+                >
+                  CAMERA
+                </button>
+                <button
+                  onClick={() => fileRef.current?.click()}
+                  className="px-6 py-3 rounded-xl font-pixel text-gray-300 text-xs border border-gray-600 bg-[#161b22]"
+                >
+                  UPLOAD
+                </button>
+              </div>
+            )}
+            <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
+            {cameraActive && (
+              <div className="flex flex-col items-center gap-3">
+                <button
+                  onClick={captureFrame}
+                  className="dex-btn w-20 h-20 rounded-full font-pixel text-white text-xs"
+                >
+                  SNAP
+                </button>
+                <button
+                  onClick={() => fileRef.current?.click()}
+                  className="font-pixel text-gray-500 text-xs underline"
+                >
+                  UPLOAD INSTEAD
+                </button>
+              </div>
             )}
           </div>
         )}
@@ -301,6 +336,13 @@ export default function IdentifyPage() {
           </div>
         )}
       </main>
+
+      {celebrating && result && (
+        <NewCatchOverlay
+          commonName={result.commonName}
+          onDone={() => setCelebrating(false)}
+        />
+      )}
 
       <DexBottomBar />
     </div>

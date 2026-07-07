@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
+import { resolveSpecies, toRegionCode } from "@/lib/ebird";
 
 const client = new Anthropic();
 
@@ -17,7 +18,7 @@ const BirdResult = z.object({
 
 export async function POST(req: NextRequest) {
   try {
-    const { imageBase64, mimeType = "image/jpeg" } = await req.json();
+    const { imageBase64, mimeType = "image/jpeg", country, state } = await req.json();
     if (!imageBase64) return NextResponse.json({ error: "No image provided" }, { status: 400 });
 
     const response = await client.messages.create({
@@ -59,6 +60,19 @@ If no bird is visible or identifiable, set isBird to false and use empty strings
     if (!jsonMatch) return NextResponse.json({ error: "Could not parse response" }, { status: 500 });
 
     const parsed = BirdResult.parse(JSON.parse(jsonMatch[0]));
+
+    // Claude's speciesCode is a guess and often wrong — the dex is keyed on real
+    // eBird codes, so resolve the name against actual taxonomy before returning.
+    if (parsed.isBird) {
+      const regionCode = country ? toRegionCode(country, state) : undefined;
+      const match = await resolveSpecies(parsed.commonName, parsed.scientificName, regionCode);
+      if (match) {
+        parsed.speciesCode = match.speciesCode;
+        parsed.commonName = match.comName;
+        parsed.scientificName = match.sciName;
+      }
+    }
+
     return NextResponse.json(parsed);
   } catch (err) {
     console.error("identify error:", err);

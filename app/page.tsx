@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useUser, SignInButton } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import DexTopBar from "@/components/DexTopBar";
@@ -12,20 +12,25 @@ interface DexEntry {
   sciName: string;
   number: number;
   caught: boolean;
+  rarity: "common" | "uncommon" | "rare";
+  photoUrl: string | null;
   familyComName?: string;
 }
 
 export default function HomePage() {
   const { user, isLoaded } = useUser();
   const [dex, setDex] = useState<DexEntry[]>([]);
+  const [thumbs, setThumbs] = useState<Record<string, string | null>>({});
   const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState<"all" | "caught" | "missing">("all");
   const [search, setSearch] = useState("");
+  const migratedRef = useRef(false);
 
   useEffect(() => {
     if (!isLoaded) return;
     loadDex();
-  }, [isLoaded]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoaded, user?.id]);
 
   async function loadDex() {
     setLoading(true);
@@ -34,19 +39,57 @@ export default function HomePage() {
       const state = localStorage.getItem("birddex_state") || "NY";
       const params = country === "US" ? `country=US&state=${state}` : `country=${country}`;
       const res = await fetch(`/api/dex?${params}`);
-      const data = await res.json();
-      // Merge localStorage guest catches
+      let data: DexEntry[] = await res.json();
+
       const guestCaught: string[] = JSON.parse(localStorage.getItem("birddex_caught_guest") || "[]");
-      if (guestCaught.length > 0) {
+
+      if (user && guestCaught.length > 0 && !migratedRef.current) {
+        // Signed in with guest catches — move them into the account, then reload
+        migratedRef.current = true;
+        const byCode = new Map(data.map((e) => [e.speciesCode, e]));
+        await fetch("/api/sighting", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sightings: guestCaught.map((code) => ({
+              speciesCode: code,
+              commonName: byCode.get(code)?.comName || code,
+              sciName: byCode.get(code)?.sciName,
+            })),
+          }),
+        });
+        localStorage.removeItem("birddex_caught_guest");
+        const res2 = await fetch(`/api/dex?${params}`);
+        data = await res2.json();
+      } else if (!user && guestCaught.length > 0) {
+        // Guest: merge localStorage catches for display
         const guestSet = new Set(guestCaught);
-        setDex(data.map((e: DexEntry) => ({ ...e, caught: e.caught || guestSet.has(e.speciesCode) })));
-      } else {
-        setDex(data);
+        data = data.map((e) => ({ ...e, caught: e.caught || guestSet.has(e.speciesCode) }));
       }
+
+      setDex(data);
+      loadThumbs(data);
     } catch {
       // ignore
     } finally {
       setLoading(false);
+    }
+  }
+
+  // Wikipedia thumbnails for caught birds that don't have a user photo yet
+  async function loadThumbs(data: DexEntry[]) {
+    const need = data.filter((e) => e.caught && !e.photoUrl).map((e) => e.comName);
+    if (need.length === 0) return;
+    try {
+      const res = await fetch("/api/thumbs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ names: need }),
+      });
+      const { thumbs: t } = await res.json();
+      setThumbs(t || {});
+    } catch {
+      // silhouettes are a fine fallback
     }
   }
 
@@ -126,7 +169,11 @@ export default function HomePage() {
         ) : (
           <div className="grid grid-cols-3 gap-2 px-4 pb-4">
             {filtered.map((entry) => (
-              <DexTile key={entry.speciesCode} entry={entry} />
+              <DexTile
+                key={entry.speciesCode}
+                entry={entry}
+                thumbUrl={entry.photoUrl || thumbs[entry.comName] || null}
+              />
             ))}
             {filtered.length === 0 && (
               <div className="col-span-3 text-center py-10">
@@ -142,31 +189,49 @@ export default function HomePage() {
   );
 }
 
-function DexTile({ entry }: { entry: DexEntry }) {
+const RARITY_STYLE: Record<DexEntry["rarity"], { label: string; className: string }> = {
+  common: { label: "C", className: "bg-gray-700 text-gray-300" },
+  uncommon: { label: "U", className: "bg-blue-900 text-blue-300" },
+  rare: { label: "R", className: "bg-yellow-900 text-[var(--dex-yellow)]" },
+};
+
+function DexTile({ entry, thumbUrl }: { entry: DexEntry; thumbUrl: string | null }) {
   const router = useRouter();
   function handleClick() {
     if (entry.caught) {
-      router.push(`/species/${entry.speciesCode}?name=${encodeURIComponent(entry.comName)}`);
+      router.push(`/species/${entry.speciesCode}?name=${encodeURIComponent(entry.comName)}&rarity=${entry.rarity}`);
     }
   }
+  const rarity = RARITY_STYLE[entry.rarity] || RARITY_STYLE.common;
   return (
     <div
       onClick={handleClick}
-      className={`rounded-lg border p-2 flex flex-col items-center gap-1 aspect-square justify-center cursor-pointer
+      className={`relative rounded-lg border p-2 flex flex-col items-center gap-1 aspect-square justify-center cursor-pointer overflow-hidden
         ${entry.caught ? "border-[var(--dex-green)] caught-glow bg-[#0d2818]" : "border-gray-800 bg-[#161b22]"}`}
     >
+      <span
+        className={`absolute top-1 right-1 font-pixel rounded px-1 py-0.5 ${rarity.className}`}
+        style={{ fontSize: "6px" }}
+      >
+        {rarity.label}
+      </span>
       <span className="dex-number" style={{fontSize:"7px"}}>#{entry.number.toString().padStart(3,"0")}</span>
-      {/* Bird silhouette SVG placeholder */}
-      <div className={`w-10 h-10 flex items-center justify-center ${entry.caught ? "" : "silhouette"}`}>
-        <svg viewBox="0 0 40 40" fill="currentColor" className={entry.caught ? "text-[var(--dex-green)]" : "text-gray-600"}>
-          <ellipse cx="20" cy="24" rx="10" ry="7"/>
-          <circle cx="20" cy="14" r="6"/>
-          <ellipse cx="29" cy="20" rx="6" ry="3" transform="rotate(-20 29 20)"/>
-          <ellipse cx="11" cy="20" rx="6" ry="3" transform="rotate(20 11 20)"/>
-          <line x1="17" y1="31" x2="15" y2="37" stroke="currentColor" strokeWidth="2"/>
-          <line x1="23" y1="31" x2="25" y2="37" stroke="currentColor" strokeWidth="2"/>
-        </svg>
-      </div>
+      {entry.caught && thumbUrl ? (
+        <div className="w-11 h-11 rounded overflow-hidden border border-[var(--dex-green)]">
+          <img src={thumbUrl} alt={entry.comName} className="w-full h-full object-cover" loading="lazy" />
+        </div>
+      ) : (
+        <div className={`w-10 h-10 flex items-center justify-center ${entry.caught ? "" : "silhouette"}`}>
+          <svg viewBox="0 0 40 40" fill="currentColor" className={entry.caught ? "text-[var(--dex-green)]" : "text-gray-600"}>
+            <ellipse cx="20" cy="24" rx="10" ry="7"/>
+            <circle cx="20" cy="14" r="6"/>
+            <ellipse cx="29" cy="20" rx="6" ry="3" transform="rotate(-20 29 20)"/>
+            <ellipse cx="11" cy="20" rx="6" ry="3" transform="rotate(20 11 20)"/>
+            <line x1="17" y1="31" x2="15" y2="37" stroke="currentColor" strokeWidth="2"/>
+            <line x1="23" y1="31" x2="25" y2="37" stroke="currentColor" strokeWidth="2"/>
+          </svg>
+        </div>
+      )}
       <p className="text-center leading-tight" style={{fontSize:"8px", color: entry.caught ? "#39d353" : "#7d8590"}}>
         {entry.comName.length > 12 ? entry.comName.slice(0,11) + "…" : entry.comName}
       </p>

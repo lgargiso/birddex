@@ -98,12 +98,37 @@ const COUNTRIES: [string, string][] = [
   ["CU","Cuba"],
 ];
 
+interface DexEntry {
+  speciesCode: string;
+  comName: string;
+  caught: boolean;
+  rarity: "common" | "uncommon" | "rare";
+  familyComName?: string;
+}
+
+interface SightingRow {
+  speciesCode: string;
+  commonName: string;
+  spottedAt: string;
+}
+
+interface TrainerStats {
+  caught: number;
+  total: number;
+  families: number;
+  totalFamilies: number;
+  rare: number;
+  uncommon: number;
+  recent: SightingRow[];
+}
+
 export default function SetupPage() {
   const { user } = useUser();
   const router = useRouter();
   const [country, setCountry] = useState("US");
   const [state, setState] = useState("NY");
   const [saved, setSaved] = useState(false);
+  const [stats, setStats] = useState<TrainerStats | null>(null);
 
   useEffect(() => {
     const storedCountry = localStorage.getItem("birddex_country");
@@ -111,6 +136,41 @@ export default function SetupPage() {
     if (storedCountry) setCountry(storedCountry);
     if (storedState) setState(storedState);
   }, []);
+
+  useEffect(() => {
+    async function loadStats() {
+      try {
+        const c = localStorage.getItem("birddex_country") || "US";
+        const s = localStorage.getItem("birddex_state") || "NY";
+        const params = c === "US" ? `country=US&state=${s}` : `country=${c}`;
+        const [dexRes, sightRes] = await Promise.all([
+          fetch(`/api/dex?${params}`).then((r) => r.json()),
+          user
+            ? fetch("/api/sighting").then((r) => r.json()).catch(() => ({ sightings: [] }))
+            : Promise.resolve({ sightings: [] }),
+        ]);
+        const dex: DexEntry[] = Array.isArray(dexRes) ? dexRes : [];
+        const guestCaught = new Set<string>(
+          JSON.parse(localStorage.getItem("birddex_caught_guest") || "[]")
+        );
+        const caughtEntries = dex.filter((e) => e.caught || guestCaught.has(e.speciesCode));
+        const allFamilies = new Set(dex.map((e) => e.familyComName).filter(Boolean));
+        const caughtFamilies = new Set(caughtEntries.map((e) => e.familyComName).filter(Boolean));
+        setStats({
+          caught: caughtEntries.length,
+          total: dex.length,
+          families: caughtFamilies.size,
+          totalFamilies: allFamilies.size,
+          rare: caughtEntries.filter((e) => e.rarity === "rare").length,
+          uncommon: caughtEntries.filter((e) => e.rarity === "uncommon").length,
+          recent: (sightRes.sightings || []).slice(0, 5),
+        });
+      } catch {
+        // stats are decorative — fail silent
+      }
+    }
+    loadStats();
+  }, [user]);
 
   function save() {
     localStorage.setItem("birddex_country", country);
@@ -142,6 +202,54 @@ export default function SetupPage() {
               <p className="text-white text-sm font-medium">{user.fullName || "Trainer"}</p>
               <p className="text-gray-500 text-xs">{user.primaryEmailAddress?.emailAddress}</p>
             </div>
+          </div>
+        )}
+
+        {/* Trainer stats */}
+        {stats && stats.total > 0 && (
+          <div className="bg-[#161b22] border border-gray-700 rounded-xl p-4 space-y-3">
+            <p className="font-pixel text-xs text-gray-400">TRAINER STATS</p>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="bg-[#0d1117] rounded p-3 border border-gray-700 text-center">
+                <p className="font-pixel text-[var(--dex-green)] text-lg">{stats.caught}</p>
+                <p className="dex-number mt-1" style={{ color: "#7d8590", textShadow: "none" }}>
+                  OF {stats.total} CAUGHT
+                </p>
+              </div>
+              <div className="bg-[#0d1117] rounded p-3 border border-gray-700 text-center">
+                <p className="font-pixel text-[var(--dex-green)] text-lg">
+                  {stats.total ? Math.round((stats.caught / stats.total) * 100) : 0}%
+                </p>
+                <p className="dex-number mt-1" style={{ color: "#7d8590", textShadow: "none" }}>
+                  COMPLETION
+                </p>
+              </div>
+              <div className="bg-[#0d1117] rounded p-3 border border-gray-700 text-center">
+                <p className="font-pixel text-blue-300 text-lg">{stats.families}</p>
+                <p className="dex-number mt-1" style={{ color: "#7d8590", textShadow: "none" }}>
+                  OF {stats.totalFamilies} FAMILIES
+                </p>
+              </div>
+              <div className="bg-[#0d1117] rounded p-3 border border-gray-700 text-center">
+                <p className="font-pixel text-[var(--dex-yellow)] text-lg">{stats.rare}</p>
+                <p className="dex-number mt-1" style={{ color: "#7d8590", textShadow: "none" }}>
+                  RARE CATCHES
+                </p>
+              </div>
+            </div>
+            {stats.recent.length > 0 && (
+              <div className="space-y-1.5">
+                <p className="dex-number">RECENT CATCHES</p>
+                {stats.recent.map((s) => (
+                  <div key={s.speciesCode} className="flex items-center justify-between bg-[#0d1117] rounded px-3 py-2 border border-gray-700">
+                    <span className="text-gray-200 text-xs">{s.commonName}</span>
+                    <span className="text-gray-600 text-xs">
+                      {new Date(s.spottedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

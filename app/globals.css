@@ -95,3 +95,21 @@ body {
   color: var(--dex-green);
   text-shadow: 0 0 4px var(--dex-green);
 }
+
+/* New-catch celebration */
+@keyframes confetti-fall {
+  0%   { transform: translateY(-10vh) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(110vh) rotate(720deg); opacity: 0.6; }
+}
+.confetti-piece {
+  position: absolute;
+  top: 0;
+  animation: confetti-fall linear infinite;
+}
+
+@keyframes burst-in {
+  0%   { transform: scale(0.3); opacity: 0; }
+  60%  { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.new-catch-burst { animation: burst-in 0.5s ease-out; }

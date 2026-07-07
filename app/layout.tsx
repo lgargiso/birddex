@@ -6,6 +6,10 @@ export const metadata: Metadata = {
   title: "BirdDex",
   description: "Identify wild birds and build your BirdDex",
   manifest: "/manifest.json",
+  icons: {
+    icon: [{ url: "/icon-192.png", sizes: "192x192" }, { url: "/icon-512.png", sizes: "512x512" }],
+    apple: "/apple-touch-icon.png",
+  },
   appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "BirdDex" },
 };
 
