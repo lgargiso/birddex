@@ -32,6 +32,16 @@ export default function HomePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoaded, user?.id]);
 
+  // Refresh dex whenever the user returns to this page (e.g. after adding a bird)
+  useEffect(() => {
+    function onVisible() {
+      if (document.visibilityState === "visible") loadDex();
+    }
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoaded, user?.id]);
+
   async function loadDex() {
     setLoading(true);
     try {
